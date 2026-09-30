@@ -78,10 +78,8 @@ internal static partial class ContinuousMakeExecutionController
     }
 
     /// <summary>
-    /// The panel's 制作 button always keeps the game's own behaviour. Only a batch that is
-    /// actually running takes the click over (and that click then means "stop"). Enabling
-    /// continuous mode or the batch button never disables normal crafting, so batch settings
-    /// cannot affect 制作.
+    /// In checkbox mode the confirm button starts the configured batch. During a running
+    /// batch it requests a stop; otherwise the unchecked button keeps native crafting.
     /// </summary>
     internal static bool HandleConfirmClick(MakeSubPageMake page)
     {
@@ -92,14 +90,26 @@ internal static partial class ContinuousMakeExecutionController
             return false;
 
         var view = MakeSelectMaterialPatch.GetParentView(page);
-        if (view == null || !RunningPages.Contains(page))
+        if (view == null)
             return true;
 
-        // A batch is running on this page and owns the round it already started; let the
-        // player stop it with the same button.
-        StopRequestedViews.Add(view);
-        RefreshConfirmButtonState(page);
-        return false;
+        if (RunningPages.Contains(page))
+        {
+            StopRequestedViews.Add(view);
+            RefreshConfirmButtonState(page);
+            return false;
+        }
+
+        if (ContinuousMakeUiController.IsContinuousMakeEnabledFor(view)
+            && Plugin.IsEnabledForLifeSkill(view.CurLifeSkillType))
+        {
+            // Do not fall through to a single craft when batch preconditions reject the
+            // start: that would bypass the configured material and durability restrictions.
+            TryStartConfiguredBatch(page);
+            return false;
+        }
+
+        return true;
     }
 
     internal static bool TryStopByConfirmClick(MakeSubPageMake page)

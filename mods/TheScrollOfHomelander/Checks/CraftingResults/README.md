@@ -60,3 +60,11 @@ dotnet build ./mods/TheScrollOfHomelander/Checks/CraftingResults/CraftingResults
 4. 背包与仓库持有同模板材料时，耗尽一处不会误取消另一处的有效选择；列表无零数量残留。
 5. 条件检查失败、停止批量、无材料、快速关闭再打开界面后，按钮和选材状态正常。
 6. 关闭对应技艺的制作优化后不自动填资源或进入连续制作；允许徒手时无可用工具可正确回退。
+7. 批量制作设为勾选模式，勾选后点击原生“制作”应启动连续批量，按钮变为停止。
+   再次点击应停止；取消勾选后点击应只做原生单次制作。按钮模式仍由独立批量按钮启动。
+   勾选模式没有符合范围的材料或启动条件不满足时不得退回单次制作绕过限制。
+
+2026-09-30：当前 `Game.Views.Make.MakeSubPageMake.OnClickButtonConfirm()`
+（前端 `Assembly-CSharp.dll`，token `0x06006B45`）仍为原生单次提交。
+Mod 的 `ContinuousMakeConfirmPatch` 在最高优先级 Prefix 中将勾选模式路由到
+现有 `TryStartConfiguredBatch`，与独立批量按钮共用执行、刷新续作及停止流程。

@@ -114,7 +114,7 @@ internal sealed class ContinuousMakeUiController : MonoBehaviour
 {
     private const float ContinuousToggleWidth = 180f;
     private const float ContinuousToggleHeight = 46f;
-    private const float ContinuousToggleOffsetY = 70f;
+    private const float ContinuousToggleOffsetY = -70f;
     private const float BatchMakeButtonOffsetY = -70f;
     private const float SettingsButtonOffsetX = -155f;
 
