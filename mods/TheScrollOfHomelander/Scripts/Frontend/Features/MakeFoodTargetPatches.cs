@@ -507,7 +507,7 @@ internal static class MakeTargetSlotCombinedFoodNamePatch
         var textName = Traverse.Create(__instance)
             .Field("textName")
             .GetValue<TextMeshProUGUI>();
-        textName?.SetText("荤素");
+        textName?.SetText(ModLocalization.T("Meat and Vegetables"));
     }
 }
 

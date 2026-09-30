@@ -131,7 +131,7 @@ internal static partial class ContinuousMakeExecutionController
             // handed back verbatim when the batch ends.
             if (!_confirmLabelByPage.ContainsKey(page))
                 _confirmLabelByPage[page] = text.text;
-            text.text = "停止制作";
+            text.text = ModLocalization.T("Stop Crafting");
         }
         if (button != null)
             button.interactable = !stopRequested;

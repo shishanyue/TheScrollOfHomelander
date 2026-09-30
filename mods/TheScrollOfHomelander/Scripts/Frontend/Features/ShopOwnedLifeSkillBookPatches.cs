@@ -209,7 +209,7 @@ internal sealed class ShopOwnedLifeSkillBookMarker : MonoBehaviour
                 text => text != null && text != _label && text.font != null);
             if (fontSource != null)
                 _label.font = fontSource.font;
-            _label.SetText("已拥有");
+            _label.SetText(ModLocalization.T("已拥有"));
             _label.alignment = TextAlignmentOptions.BottomLeft;
             _label.fontStyle = FontStyles.Bold;
             _label.enableAutoSizing = true;

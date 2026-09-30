@@ -174,7 +174,7 @@ internal sealed class PurchaseOptimizationSettingsPanel : MonoBehaviour
         scroll ??= FindComponentByTypeName("InfinityScroll");
         confirmBtn ??= FindDeep(transform, "EnterGame")?.GetComponent<CButton>();
         if (title != null)
-            title.SetText("批量采购设置");
+            title.SetText(ModLocalization.T("批量采购设置"));
 
         if (scroll != null)
             scroll.gameObject.SetActive(false);
@@ -499,7 +499,7 @@ internal sealed class PurchaseOptimizationSettingsPanel : MonoBehaviour
             dropdown.onValueChanged = new FwUi.CDropdown.DropdownEvent();
             DisableTooltips(dropdown.gameObject);
             dropdown.ClearOptions();
-            dropdown.AddOptions(new List<string>(options));
+            dropdown.AddOptions(new List<string>(ModLocalization.Options(options)));
             dropdown.SetValueWithoutNotify(Mathf.Clamp(getter(), 0, options.Count - 1));
             dropdown.onValueChanged.AddListener(index =>
             {
@@ -539,7 +539,7 @@ internal sealed class PurchaseOptimizationSettingsPanel : MonoBehaviour
         var labelText = Traverse.Create(row.GetComponent<SysSetting.SettingItemBase>()).Field("labelText").GetValue<TextMeshProUGUI>();
         if (labelText != null)
         {
-            labelText.SetText(label);
+            labelText.SetText(ModLocalization.T(label));
             labelText.enableAutoSizing = true;
             labelText.fontSizeMin = 18f;
             labelText.fontSizeMax = 26f;
@@ -556,7 +556,7 @@ internal sealed class PurchaseOptimizationSettingsPanel : MonoBehaviour
 
         foreach (var item in GetComponentsInChildren<SysSetting.BoolSettingItem>(true))
         {
-            var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+            var label = ModLocalization.RowKey(item);
             var toggle = Traverse.Create(item).Field("toggle").GetValue<FwUi.CToggle>();
             if (toggle == null)
                 continue;
@@ -578,7 +578,7 @@ internal sealed class PurchaseOptimizationSettingsPanel : MonoBehaviour
 
         foreach (var item in GetComponentsInChildren<SysSetting.EnumSettingItem>(true))
         {
-            var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+            var label = ModLocalization.RowKey(item);
             var dropdown = Traverse.Create(item).Field("dropdown").GetValue<FwUi.CDropdown>();
             if (dropdown == null)
                 continue;
@@ -796,6 +796,9 @@ internal sealed class PurchaseOptimizationSettingsPanel : MonoBehaviour
             target.gameObject.SetActive(false);
     }
 
+    private static readonly HashSet<string> ArchiveHeaderLabels =
+        ModLocalization.BuildBilingualLabelSet(new[] { "头像", "名字", "第几世", "第几个", "存档时间", "所在地点" });
+
     private void HideArchiveHeaderRow()
     {
         var headerTexts = new List<Transform>();
@@ -804,16 +807,8 @@ internal sealed class PurchaseOptimizationSettingsPanel : MonoBehaviour
             if (text == null)
                 continue;
 
-            switch (text.text)
-            {
-                case "头像":
-                case "名字":
-                case "第几个":
-                case "存档时间":
-                case "所在地点":
-                    headerTexts.Add(text.transform);
-                    break;
-            }
+            if (ArchiveHeaderLabels.Contains(text.text))
+                headerTexts.Add(text.transform);
         }
 
         if (headerTexts.Count == 0)

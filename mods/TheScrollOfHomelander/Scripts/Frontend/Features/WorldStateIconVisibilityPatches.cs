@@ -618,7 +618,7 @@ internal sealed class WorldStateVisibilityButtonMarker : MonoBehaviour
             return;
 
         var hidden = WorldStateIconVisibilitySettingsStore.IsHidden(_templateId);
-        _label.SetText(hidden ? "恢复" : "隐藏");
+        _label.SetText(ModLocalization.T(hidden ? "恢复" : "隐藏"));
         _label.color = hidden ? RestoreColor : HideColor;
     }
 

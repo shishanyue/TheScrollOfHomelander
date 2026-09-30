@@ -69,13 +69,12 @@ internal static class ItemListRefreshCoordinatorPatchLifecycle
         nameof(ItemListScroll.SetItemList),
         new[] { typeof(IReadOnlyList<ITradeableContent>), typeof(int) });
     private static bool _installed;
+    private static bool _unavailable;
 
-    internal static void Refresh(Harmony harmony, bool patchAllJustCompleted = false)
+    internal static void Refresh(Harmony harmony)
     {
-        if (harmony == null)
+        if (harmony == null || _unavailable)
             return;
-        if (patchAllJustCompleted)
-            _installed = true;
 
         var shouldInstall = Plugin.EnableInventorySearchBoxOptimization
             || Plugin.EnableFilterMemory
@@ -85,8 +84,26 @@ internal static class ItemListRefreshCoordinatorPatchLifecycle
 
         if (shouldInstall)
         {
-            harmony.CreateClassProcessor(typeof(ItemListRefreshCoordinatorBasicPatch)).Patch();
-            harmony.CreateClassProcessor(typeof(ItemListRefreshCoordinatorSelectedPatch)).Patch();
+            try
+            {
+                harmony.CreateClassProcessor(typeof(ItemListRefreshCoordinatorBasicPatch)).Patch();
+                harmony.CreateClassProcessor(typeof(ItemListRefreshCoordinatorSelectedPatch)).Patch();
+            }
+            catch (System.Exception ex)
+            {
+                _unavailable = true;
+                UnityEngine.Debug.LogWarning("[BetterTaiwuScroll] Disabled item-list coordinator patches: " + ex);
+                try
+                {
+                    if (BasicMethod != null) harmony.Unpatch(BasicMethod, HarmonyPatchType.All, harmony.Id);
+                    if (SelectedMethod != null) harmony.Unpatch(SelectedMethod, HarmonyPatchType.All, harmony.Id);
+                }
+                catch (System.Exception cleanup)
+                {
+                    UnityEngine.Debug.LogWarning("[BetterTaiwuScroll] Item-list coordinator cleanup incomplete: " + cleanup);
+                }
+                return;
+            }
         }
         else
         {
@@ -101,6 +118,7 @@ internal static class ItemListRefreshCoordinatorPatchLifecycle
     internal static void Reset()
     {
         _installed = false;
+        _unavailable = false;
     }
 }
 

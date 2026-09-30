@@ -470,8 +470,8 @@ internal sealed class PurchaseOptimizationUiController : MonoBehaviour
             childButton.interactable = true;
 
         button.ClearAndAddListener(onClick);
-        SetButtonText(buttonObj, text);
-        (buttonObj.GetComponent<ButtonTextOverride>() ?? buttonObj.AddComponent<ButtonTextOverride>()).SetText(text);
+        SetButtonText(buttonObj, ModLocalization.T(text));
+        (buttonObj.GetComponent<ButtonTextOverride>() ?? buttonObj.AddComponent<ButtonTextOverride>()).SetText(ModLocalization.T(text));
         ConfigureTooltip(buttonObj, text);
         buttonObj.SetActive(true);
         return button;
@@ -688,8 +688,8 @@ internal sealed class PurchaseOptimizationUiController : MonoBehaviour
             tooltip.NeedRefresh = false;
             tooltip.PresetParam = new[]
             {
-                text,
-                text == "设置" ? "打开批量采购设置。" : "按照设置把符合条件的商品加入买入列表。"
+                ModLocalization.T(text),
+                ModLocalization.T(text == "设置" ? "打开批量采购设置。" : "按照设置把符合条件的商品加入买入列表。")
             };
         }
     }

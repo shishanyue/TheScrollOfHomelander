@@ -553,7 +553,7 @@ internal sealed class ExchangePanelSearchBox
         viewportRect.offsetMin = new Vector2(12f, 2f);
         viewportRect.offsetMax = new Vector2(-10f, -2f);
 
-        var placeholder = CreateText(viewportRect, "Placeholder", "输入关键字", new Color(0.85f, 0.78f, 0.62f, 0.65f));
+        var placeholder = CreateText(viewportRect, "Placeholder", ModLocalization.T("Enter keyword"), new Color(0.85f, 0.78f, 0.62f, 0.65f));
         var text = CreateText(viewportRect, "Text", string.Empty, new Color(0.98f, 0.95f, 0.84f, 1f));
         text.gameObject.SetActive(true);
 
@@ -605,7 +605,7 @@ internal sealed class ExchangePanelSearchBox
         input.SetTextWithoutNotify(string.Empty);
         if (input.placeholder is TMP_Text placeholder)
         {
-            placeholder.SetText("输入关键字");
+            placeholder.SetText(ModLocalization.T("Enter keyword"));
             placeholder.color = new Color(0.85f, 0.78f, 0.62f, 0.65f);
             placeholder.enableAutoSizing = true;
             placeholder.fontSizeMax = Math.Min(placeholder.fontSizeMax <= 0f ? 22f : placeholder.fontSizeMax, 19f);

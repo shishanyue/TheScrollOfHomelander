@@ -214,7 +214,7 @@ internal sealed class ContinuousMakeUiController : MonoBehaviour
             _continuousToggle = toggleObj.GetComponent<CToggle>() ?? toggleObj.AddComponent<CToggle>();
             _continuousToggle.onValueChanged.RemoveAllListeners();
             _continuousToggle.onValueChanged.AddListener(OnContinuousToggleChanged);
-            SetToggleLabel(toggleObj, "连续制作");
+            SetToggleLabel(toggleObj, ModLocalization.T("Continuous Crafting"));
             ConfigureContinuousToggleTooltip(toggleObj);
         }
 
@@ -262,8 +262,8 @@ internal sealed class ContinuousMakeUiController : MonoBehaviour
             }
 
             _batchMakeButton.ClearAndAddListener(OnBatchMakeButtonClick);
-            SetButtonText(buttonObj, "批量制作");
-            (buttonObj.GetComponent<ButtonTextOverride>() ?? buttonObj.AddComponent<ButtonTextOverride>()).SetText("批量制作");
+            SetButtonText(buttonObj, ModLocalization.T("Batch Crafting"));
+            (buttonObj.GetComponent<ButtonTextOverride>() ?? buttonObj.AddComponent<ButtonTextOverride>()).SetText(ModLocalization.T("Batch Crafting"));
             ConfigureBatchMakeButtonTooltip(buttonObj);
         }
 
@@ -343,8 +343,8 @@ internal sealed class ContinuousMakeUiController : MonoBehaviour
         SetButtonInteractable(buttonObj, true);
         _settingsButton.ClearAndAddListener(OpenSettingsPanel);
 
-        SetButtonText(buttonObj, "设置");
-        (buttonObj.GetComponent<ButtonTextOverride>() ?? buttonObj.AddComponent<ButtonTextOverride>()).SetText("设置");
+        SetButtonText(buttonObj, ModLocalization.T("Settings"));
+        (buttonObj.GetComponent<ButtonTextOverride>() ?? buttonObj.AddComponent<ButtonTextOverride>()).SetText(ModLocalization.T("Settings"));
         ConfigureSettingsButtonTooltip(buttonObj);
         buttonObj.SetActive(true);
         ContinuousMakeSettingsPanel.Preload();
@@ -483,8 +483,8 @@ internal sealed class ContinuousMakeUiController : MonoBehaviour
             tooltip.NeedRefresh = false;
             tooltip.PresetParam = new[]
             {
-                "连续制作",
-                "勾选后，制作完成时将按照设置继续进行下一次制作。"
+                ModLocalization.T("Continuous Crafting"),
+                ModLocalization.T("When checked, crafting continues to the next batch per your settings once complete.")
             };
         }
     }
@@ -503,8 +503,8 @@ internal sealed class ContinuousMakeUiController : MonoBehaviour
             tooltip.NeedRefresh = false;
             tooltip.PresetParam = new[]
             {
-                "连续制作设置",
-                "打开连续制作的设置界面。"
+                ModLocalization.T("Continuous Crafting Settings"),
+                ModLocalization.T("Open the continuous-crafting settings panel.")
             };
         }
     }
@@ -523,8 +523,8 @@ internal sealed class ContinuousMakeUiController : MonoBehaviour
             tooltip.NeedRefresh = false;
             tooltip.PresetParam = new[]
             {
-                "批量制作",
-                "按照连续制作设置从当前制作开始批量制作。"
+                ModLocalization.T("Batch Crafting"),
+                ModLocalization.T("Batch-craft from the current recipe using your continuous-crafting settings.")
             };
         }
     }

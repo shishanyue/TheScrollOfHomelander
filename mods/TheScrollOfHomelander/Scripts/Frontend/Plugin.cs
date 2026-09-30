@@ -139,12 +139,8 @@ public sealed class Plugin : TaiwuRemakePlugin
                 ? null : BetterTaiwuScroll.Shared.ModPatchGroups.Classify(type),
             message => Debug.LogWarning("[BetterTaiwuScroll] " + message),
             group => { if (group == "make") MakeGameApi.Validate(); });
-        foreach (var type in typeof(Plugin).Assembly.GetTypes())
-            if (type.Name.StartsWith("ItemListRefreshCoordinator", StringComparison.Ordinal)
-                && type.GetCustomAttributes(typeof(HarmonyPatch), false).Length > 0)
-                _harmony.CreateClassProcessor(type).Patch();
         GamePerformancePatchLifecycle.Refresh();
-        ItemListRefreshCoordinatorPatchLifecycle.Refresh(_harmony, patchAllJustCompleted: true);
+        ItemListRefreshCoordinatorPatchLifecycle.Refresh(_harmony);
         MakeStorageLocationMemoryController.Install(_harmony);
         GradeColorOptimizationSupport.ApplyOrRestore();
         MapBlockCharListMerchantIconSupport.RefreshAllActive();

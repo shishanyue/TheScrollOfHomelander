@@ -14,6 +14,32 @@ using UnityEngine.UI;
 
 namespace BetterTaiwuScroll.Frontend;
 
+// Long item-category filter names shortened to fit inline buttons. Keyed by the game's
+// rendered text in each language (Chinese on a CN client, English on an EN client).
+internal static class FilterLabelAbbreviations
+{
+    private static readonly Dictionary<string, string> Map = new()
+    {
+        ["功法书"] = "功法",
+        ["技艺书"] = "技艺",
+        ["西域珍宝"] = "西域",
+        ["Martial Arts Book"] = "Martial Arts",
+        ["Fine Arts Book"] = "Fine Arts",
+        ["Western Regions Treasure"] = "Western",
+    };
+
+    internal static bool TryShorten(string text, out string shortened)
+    {
+        return Map.TryGetValue((text ?? string.Empty).Trim(), out shortened);
+    }
+
+    internal static string Shorten(string text)
+    {
+        var trimmed = (text ?? string.Empty).Trim();
+        return Map.TryGetValue(trimmed, out var shortened) ? shortened : trimmed;
+    }
+}
+
 [HarmonyPatch(typeof(Game.Views.Exchange.ViewExchangeBase), "OnSelfItemRender")]
 internal static class ExchangeSelfItemTextColorPatch
 {
@@ -147,7 +173,9 @@ internal static class CompactItemSortButtonGroupPatch
     private static readonly FieldInfo FilterSummaryAreaField =
         AccessTools.Field(typeof(Game.Components.SortAndFilter.SortAndFilter), "filterSummaryArea");
 
-    private static readonly HashSet<string> ItemSortLabels = new()
+    // Recognized by matching the game's rendered sort-column labels. Built to contain both
+    // the Chinese labels and the English text the game shows, so recognition works on any client.
+    private static readonly HashSet<string> ItemSortLabels = ModLocalization.BuildBilingualLabelSet(new[]
     {
         "名称",
         "品阶",
@@ -176,9 +204,9 @@ internal static class CompactItemSortButtonGroupPatch
         "指令",
         "培养次数",
         "培养",
-    };
+    });
 
-    private static readonly HashSet<string> TeamSortLabels = new()
+    private static readonly HashSet<string> TeamSortLabels = ModLocalization.BuildBilingualLabelSet(new[]
     {
         "名称",
         "品阶",
@@ -246,6 +274,18 @@ internal static class CompactItemSortButtonGroupPatch
         "乐器",
         "持有",
         "指令",
+    });
+
+    // Long sort-column labels shortened to fit compact buttons. Keyed by the game's rendered
+    // text in each language (Chinese on a CN client, English on an EN client) -> short form.
+    private static readonly Dictionary<string, string> CompactSortLabelShortening = new()
+    {
+        ["工具效果"] = "效果",
+        ["培养次数"] = "培养",
+        ["功法造诣"] = "造诣",
+        ["Tool Effects"] = "Effects",
+        ["Training Count"] = "Training",
+        ["Martial Art Attainment"] = "Attainment",
     };
 
     private static void Postfix(Game.Components.SortAndFilter.SortButtonGroup __instance)
@@ -445,12 +485,8 @@ internal static class CompactItemSortButtonGroupPatch
                     continue;
 
                 var text = label.text?.Trim();
-                if (text == "工具效果")
-                    label.SetText("效果");
-                else if (text == "培养次数")
-                    label.SetText("培养");
-                else if (text == "功法造诣")
-                    label.SetText("造诣");
+                if (!string.IsNullOrEmpty(text) && CompactSortLabelShortening.TryGetValue(text, out var shortened))
+                    label.SetText(shortened);
 
                 label.enableAutoSizing = true;
                 label.fontSizeMax = Math.Min(label.fontSizeMax <= 0f ? 28f : label.fontSizeMax, 20f);
@@ -1291,13 +1327,7 @@ internal sealed class SimplifiedFilterToggleState : MonoBehaviour
 
     private static string ShortenFilterLabel(string text)
     {
-        return (text ?? string.Empty).Trim() switch
-        {
-            "功法书" => "功法",
-            "技艺书" => "技艺",
-            "西域珍宝" => "西域",
-            var value => value,
-        };
+        return FilterLabelAbbreviations.Shorten(text);
     }
 }
 
@@ -2240,19 +2270,8 @@ internal sealed class InlineFilterButtonsController : MonoBehaviour
             if (label == null)
                 continue;
 
-            var text = label.text?.Trim();
-            switch (text)
-            {
-                case "功法书":
-                    label.SetText("功法");
-                    break;
-                case "技艺书":
-                    label.SetText("技艺");
-                    break;
-                case "西域珍宝":
-                    label.SetText("西域");
-                    break;
-            }
+            if (FilterLabelAbbreviations.TryShorten(label.text, out var shortened))
+                label.SetText(shortened);
 
             label.enableAutoSizing = true;
             label.fontSizeMax = Math.Min(label.fontSizeMax <= 0f ? 28f : label.fontSizeMax, 20f);

@@ -353,8 +353,8 @@ internal sealed class ExchangeFilterCategorySyncButton : MonoBehaviour
 
         _button.interactable = true;
         _button.ClearAndAddListener(ExchangeFilterCategorySyncSupport.ToggleRuntimeEnabled);
-        SetButtonText(obj, "同步");
-        (obj.GetComponent<ButtonTextOverride>() ?? obj.AddComponent<ButtonTextOverride>()).SetText("同步");
+        SetButtonText(obj, ModLocalization.T("Sync"));
+        (obj.GetComponent<ButtonTextOverride>() ?? obj.AddComponent<ButtonTextOverride>()).SetText(ModLocalization.T("Sync"));
         ConfigureTooltip(obj);
         CaptureColoredGraphics(obj);
         obj.SetActive(true);
@@ -438,8 +438,8 @@ internal sealed class ExchangeFilterCategorySyncButton : MonoBehaviour
             tooltip.NeedRefresh = false;
             tooltip.PresetParam = new[]
             {
-                "左右同步",
-                "开启此功能时，物品大分类的筛选会同步到两边"
+                ModLocalization.T("Sync Both Sides"),
+                ModLocalization.T("When enabled, item-category filters stay in sync on both sides.")
             };
         }
     }

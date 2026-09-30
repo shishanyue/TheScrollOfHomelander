@@ -118,6 +118,9 @@ internal sealed class ChickenCoopAutoCareUiController : MonoBehaviour
         _settingsButton.interactable = true;
     }
 
+    private static readonly System.Collections.Generic.HashSet<string> TroughLabels =
+        ModLocalization.BuildBilingualLabelSet(new[] { "饲槽" });
+
     private CButton FindTroughButton()
     {
         if (_buildingView == null)
@@ -133,7 +136,7 @@ internal sealed class ChickenCoopAutoCareUiController : MonoBehaviour
                 continue;
             foreach (var label in button.GetComponentsInChildren<TMP_Text>(true))
             {
-                if (label != null && string.Equals(label.text?.Trim(), "饲槽", StringComparison.Ordinal))
+                if (label != null && TroughLabels.Contains(label.text?.Trim() ?? string.Empty))
                     return button;
             }
         }
@@ -176,7 +179,7 @@ internal sealed class ChickenCoopAutoCareUiController : MonoBehaviour
         {
             if (label == null)
                 continue;
-            label.SetText(text);
+            label.SetText(ModLocalization.T(text));
             label.raycastTarget = false;
             label.enableAutoSizing = true;
             label.fontSizeMin = 18f;
@@ -335,7 +338,7 @@ internal sealed class CricketRoomAutoCareUiController : MonoBehaviour
         {
             if (label == null)
                 continue;
-            label.SetText(text);
+            label.SetText(ModLocalization.T(text));
             label.raycastTarget = false;
             label.enableAutoSizing = true;
             label.fontSizeMin = 18f;

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Scripts/Frontend/Shared/ModLocalization.cs" Link="ModLocalization.cs" />
+    <Compile Include="../../Scripts/Frontend/Shared/ModLocalizationCatalog.cs" Link="ModLocalizationCatalog.cs" />
+    <Compile Include="../../Scripts/Shared/ModPatchGroups.cs" Link="ModPatchGroups.cs" />
+    <PackageReference Include="Lib.Harmony" Version="2.4.2" />
+  </ItemGroup>
+</Project>

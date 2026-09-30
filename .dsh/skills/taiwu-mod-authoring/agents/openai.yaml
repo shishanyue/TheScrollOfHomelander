@@ -1,4 +1,0 @@
-interface:
-  display_name: "Taiwu Mod Authoring"
-  short_description: "Build and debug update-safe Taiwu Mods"
-  default_prompt: "Use $taiwu-mod-authoring to build, debug, compile, deploy, or verify a Taiwu Mod against the installed game."

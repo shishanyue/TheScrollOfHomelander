@@ -487,7 +487,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
         if (confirmBtn == null)
             confirmBtn = FindDeep(transform, "EnterGame")?.GetComponent<CButton>();
         if (title != null)
-            title.SetText(_autoRepairMode ? "自动修理设置" : _autoChickenMode ? "自动饲养元鸡设置" : _autoCricketMode ? "自动存放促织设置" : "连续制作设置");
+            title.SetText(ModLocalization.T(_autoRepairMode ? "自动修理设置" : _autoChickenMode ? "自动饲养元鸡设置" : _autoCricketMode ? "自动存放促织设置" : "连续制作设置"));
 
         if (scroll != null)
             scroll.gameObject.SetActive(false);
@@ -935,7 +935,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
             dropdown.onValueChanged = new FwUi.CDropdown.DropdownEvent();
             DisableTooltips(dropdown.gameObject);
             dropdown.ClearOptions();
-            dropdown.AddOptions(new List<string>(options));
+            dropdown.AddOptions(new List<string>(ModLocalization.Options(options)));
             dropdown.SetValueWithoutNotify(Mathf.Clamp(getter(), 0, options.Count - 1));
             dropdown.onValueChanged.AddListener(index =>
             {
@@ -967,7 +967,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
         {
             value = Mathf.Clamp(next, 0, options.Count - 1);
             if (valueText != null)
-                valueText.SetText(options[value]);
+                valueText.SetText(ModLocalization.T(options[value]));
             if (leftBtn != null)
                 leftBtn.interactable = value > 0;
             if (rightBtn != null)
@@ -1032,7 +1032,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
         var labelText = Traverse.Create(row.GetComponent<SysSetting.SettingItemBase>()).Field("labelText").GetValue<TextMeshProUGUI>();
         if (labelText != null)
         {
-            labelText.SetText(label);
+            labelText.SetText(ModLocalization.T(label));
             labelText.enableAutoSizing = true;
             labelText.fontSizeMin = 18f;
             labelText.fontSizeMax = 26f;
@@ -1051,7 +1051,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
             autoSettings.Normalize();
             foreach (var item in GetComponentsInChildren<SysSetting.BoolSettingItem>(true))
             {
-                var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+                var label = ModLocalization.RowKey(item);
                 var toggle = Traverse.Create(item).Field("toggle").GetValue<FwUi.CToggle>();
                 if (toggle == null)
                     continue;
@@ -1068,7 +1068,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
 
             foreach (var item in GetComponentsInChildren<SysSetting.SwitchButtonSettingItem>(true))
             {
-                var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+                var label = ModLocalization.RowKey(item);
                 if (label != "优先使用工具的品级")
                     continue;
 
@@ -1077,7 +1077,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
                 var valueText = traverse.Field("valueText").GetValue<TextMeshProUGUI>();
                 var leftBtn = traverse.Field("leftBtn").GetValue<FwUi.CButton>();
                 var rightBtn = traverse.Field("rightBtn").GetValue<FwUi.CButton>();
-                valueText?.SetText(ToolPriorityNames[value]);
+                valueText?.SetText(ModLocalization.T(ToolPriorityNames[value]));
                 if (leftBtn != null)
                     leftBtn.interactable = value > 0;
                 if (rightBtn != null)
@@ -1094,7 +1094,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
             chickenSettings.Normalize();
             foreach (var item in GetComponentsInChildren<SysSetting.BoolSettingItem>(true))
             {
-                var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+                var label = ModLocalization.RowKey(item);
                 var toggle = Traverse.Create(item).Field("toggle").GetValue<FwUi.CToggle>();
                 if (toggle == null)
                     continue;
@@ -1117,7 +1117,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
             var cricketSettings = AutoCricketRoomSettingsStore.Current;
             foreach (var item in GetComponentsInChildren<SysSetting.BoolSettingItem>(true))
             {
-                var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+                var label = ModLocalization.RowKey(item);
                 var toggle = Traverse.Create(item).Field("toggle").GetValue<FwUi.CToggle>();
                 if (toggle == null)
                     continue;
@@ -1138,7 +1138,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
 
         foreach (var item in GetComponentsInChildren<SysSetting.BoolSettingItem>(true))
         {
-            var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+            var label = ModLocalization.RowKey(item);
             var toggle = Traverse.Create(item).Field("toggle").GetValue<FwUi.CToggle>();
             if (toggle == null)
                 continue;
@@ -1156,7 +1156,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
 
         foreach (var item in GetComponentsInChildren<SysSetting.EnumSettingItem>(true))
         {
-            var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+            var label = ModLocalization.RowKey(item);
             var dropdown = Traverse.Create(item).Field("dropdown").GetValue<FwUi.CDropdown>();
             if (dropdown == null)
                 continue;
@@ -1171,7 +1171,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
 
         foreach (var item in GetComponentsInChildren<SysSetting.SwitchButtonSettingItem>(true))
         {
-            var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+            var label = ModLocalization.RowKey(item);
             var value = 0;
             IReadOnlyList<string> options = null;
             switch (label)
@@ -1194,7 +1194,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
             var leftBtn = traverse.Field("leftBtn").GetValue<FwUi.CButton>();
             var rightBtn = traverse.Field("rightBtn").GetValue<FwUi.CButton>();
             if (valueText != null)
-                valueText.SetText(options[value]);
+                valueText.SetText(ModLocalization.T(options[value]));
             if (leftBtn != null)
                 leftBtn.interactable = value > 0;
             if (rightBtn != null)
@@ -1203,7 +1203,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
 
         foreach (var item in GetComponentsInChildren<SysSetting.IntSettingItem>(true))
         {
-            var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+            var label = ModLocalization.RowKey(item);
             if (label != "批量制作速度")
                 continue;
 
@@ -1418,6 +1418,9 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
             target.gameObject.SetActive(false);
     }
 
+    private static readonly HashSet<string> ArchiveHeaderLabels =
+        ModLocalization.BuildBilingualLabelSet(new[] { "头像", "名字", "第几世", "存档时间", "所在地点" });
+
     private void HideArchiveHeaderRow()
     {
         var headerTexts = new List<Transform>();
@@ -1426,16 +1429,8 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
             if (text == null)
                 continue;
 
-            switch (text.text)
-            {
-                case "头像":
-                case "名字":
-                case "第几世":
-                case "存档时间":
-                case "所在地点":
-                    headerTexts.Add(text.transform);
-                    break;
-            }
+            if (ArchiveHeaderLabels.Contains(text.text))
+                headerTexts.Add(text.transform);
         }
 
         if (headerTexts.Count == 0)
@@ -1585,7 +1580,7 @@ internal sealed class ContinuousMakeSettingsPanel : MonoBehaviour
     {
         foreach (var item in GetComponentsInChildren<SysSetting.IntSettingItem>(true))
         {
-            var label = Traverse.Create(item).Field("labelText").GetValue<TextMeshProUGUI>()?.text;
+            var label = ModLocalization.RowKey(item);
             if (label != labelName)
                 continue;
 

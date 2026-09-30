@@ -1,4 +1,0 @@
-interface:
-  display_name: "Taiwu Decompiled API"
-  short_description: "Inspect current Taiwu APIs and patch targets"
-  default_prompt: "Use $taiwu-decompiled-api to inspect the installed Taiwu assemblies and confirm an exact API or Harmony target."

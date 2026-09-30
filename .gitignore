@@ -1,7 +1,8 @@
-# .NET 编译中间产物（保留 bin\Release 下的工具可执行文件）
-tools/**/obj/
-tools/**/bin/Debug/
+# .NET generated output; build workers from source after cloning.
+**/obj/
+**/bin/
 tools/.linux/
+.dsh/
 
 # IDE / 系统
 .vs/

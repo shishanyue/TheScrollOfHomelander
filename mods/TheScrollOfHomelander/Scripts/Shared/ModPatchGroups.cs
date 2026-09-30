@@ -15,8 +15,7 @@ internal sealed class ModPatchGroups : IDisposable
         Action<string> report, Action<string> validate = null)
     {
         _report = report;
-        var groups = assembly.GetTypes()
-            .Where(type => type.GetCustomAttributes(typeof(HarmonyPatch), false).Length > 0)
+        var groups = GetPatchTypes(assembly)
             .Select(type => new { Type = type, Group = classify(type) })
             .Where(entry => entry.Group != null)
             .GroupBy(entry => entry.Group).OrderBy(group => group.Key);
@@ -44,6 +43,32 @@ internal sealed class ModPatchGroups : IDisposable
         for (var i = _installed.Count - 1; i >= 0; i--)
             TryUninstall(_installed[i]);
         _installed.Clear();
+    }
+
+    private IEnumerable<Type> GetPatchTypes(Assembly assembly)
+    {
+        Type[] types;
+        try { types = assembly.GetTypes(); }
+        catch (ReflectionTypeLoadException ex)
+        {
+            types = ex.Types;
+            foreach (var error in ex.LoaderExceptions)
+                _report?.Invoke("Patch type unavailable: " + error);
+        }
+
+        foreach (var type in types)
+        {
+            if (type == null) continue;
+            bool isPatch;
+            try { isPatch = type.IsDefined(typeof(HarmonyPatch), false); }
+            catch (Exception ex)
+            {
+                _report?.Invoke("Patch metadata unavailable for '" + type.FullName + "': " + ex);
+                continue;
+            }
+            // Discovery must not instantiate attributes referencing removed game types.
+            if (isPatch) yield return type;
+        }
     }
 
     private bool TryUninstall(Harmony harmony)
