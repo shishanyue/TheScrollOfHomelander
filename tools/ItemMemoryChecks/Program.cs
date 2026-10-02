@@ -1,0 +1,44 @@
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Runtime.CompilerServices;
+var game = args[0];
+var plugin = args[1];
+AssemblyLoadContext.Default.Resolving += (_, name) => {
+    var path = Path.Combine(game, name.Name + ".dll");
+    return File.Exists(path) ? AssemblyLoadContext.Default.LoadFromAssemblyPath(path) : null;
+};
+var assembly = Assembly.LoadFrom(Path.Combine(game, "Assembly-CSharp.dll"));
+var mod = Assembly.LoadFrom(plugin);
+var flags = BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public;
+void Assert(bool success, string label) { if (!success) throw new Exception(label); Console.WriteLine("PASS " + label); }
+var listType = assembly.GetType("Game.Components.ListStyleGeneralScroll.Item.ItemListScroll", true);
+var refresh = listType.GetMethod("RefreshList", BindingFlags.Instance | BindingFlags.NonPublic, null, new[]{typeof(bool)}, null);
+Assert(refresh != null && refresh.GetParameters()[0].IsOptional, "installed RefreshList(bool) optional parameter");
+var memory = mod.GetType("BetterTaiwuScroll.Frontend.FilterMemoryController", true);
+var actualRefresh = (MethodInfo)memory.GetField("ItemListScrollRefreshListMethod", flags).GetValue(null);
+Assert(actualRefresh.MetadataToken == refresh.MetadataToken, "Mod resolves exact installed refresh overload");
+var instance = RuntimeHelpers.GetUninitializedObject(listType);
+refresh.Invoke(instance, new object[]{false});
+Assert(true, "reflection invocation supplies optional argument without parent callback");
+var card = mod.GetType("BetterTaiwuScroll.Frontend.ContainerDefaultCardModePatch", true);
+var cardField = (FieldInfo)card.GetField("CardScrollField", flags).GetValue(null);
+Assert(cardField != null && cardField.Name == "groupedCardScroll", "current card view field resolves");
+var store = mod.GetType("BetterTaiwuScroll.Frontend.MemoryOptimizationSettingsStore", true);
+var current = store.GetProperty("Current", flags).GetValue(null);
+var modesField = current.GetType().GetField("ContainerCardModes");
+var modes = (System.Collections.IList)modesField.GetValue(current);
+Assert(modes.Count == 0, "old settings default to no saved card modes");
+var entryType = mod.GetType("BetterTaiwuScroll.Frontend.ContainerCardModeMemoryEntry", true);
+void Add(string key, bool value) { var entry=Activator.CreateInstance(entryType); entryType.GetField("Key").SetValue(entry,key); entryType.GetField("IsCardMode").SetValue(entry,value); modes.Add(entry); }
+Add("Exchange_ViewWarehouse:self", false);
+Add("Exchange_ViewWarehouse:target", true);
+var get = store.GetMethod("GetContainerCardMode", flags);
+Assert((bool)get.Invoke(null,new object[]{"Exchange_ViewWarehouse:self"}) == false && (bool)get.Invoke(null,new object[]{"Exchange_ViewWarehouse:target"}) == true, "exchange sides retain independent modes");
+Assert(get.Invoke(null,new object[]{"CharacterMenuItems"}) == null, "unsaved page remains unset");
+var clone = store.GetMethod("CloneCurrent", flags).Invoke(null,null);
+var clonedModes = (System.Collections.IList)modesField.GetValue(clone);
+entryType.GetField("IsCardMode").SetValue(modes[0],true);
+Assert((bool)entryType.GetField("IsCardMode").GetValue(clonedModes[0]) == false, "async save snapshot owns copied mode entries");
+store.GetMethod("SetContainerCardMode",flags).Invoke(null,new object[]{"Exchange_ViewWarehouse:self",true});
+Assert(modes.Count == 2, "unchanged selection does not duplicate entries or enqueue a write");
+Console.WriteLine("All checks passed. No game process or user settings writer was started.");

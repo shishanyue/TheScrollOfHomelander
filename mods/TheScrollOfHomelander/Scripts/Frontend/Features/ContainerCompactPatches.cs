@@ -1007,7 +1007,7 @@ internal static class ContainerDefaultCardModePatch
     private static readonly FieldInfo UseGroupedScrollField = AccessTools.Field(typeof(ItemListScroll), "useGroupedScroll");
     private static readonly FieldInfo ScrollField = AccessTools.Field(typeof(ItemListScroll), "scroll");
     private static readonly FieldInfo GroupedScrollField = AccessTools.Field(typeof(ItemListScroll), "groupedScroll");
-    private static readonly FieldInfo CardScrollField = AccessTools.Field(typeof(ItemListScroll), "cardScroll");
+    private static readonly FieldInfo CardScrollField = AccessTools.Field(typeof(ItemListScroll), "groupedCardScroll");
     private static readonly FieldInfo BtnSwitchCardModeField = AccessTools.Field(typeof(ItemListScroll), "btnSwitchCardMode");
     private static readonly FieldInfo DefaultSwitchIndexField = AccessTools.Field(typeof(ItemListScroll), "defaultSwithIndex");
     private static readonly MethodInfo RefreshCardModeMethod = AccessTools.Method(typeof(ItemListScroll), "RefreshCardMode");
@@ -1017,16 +1017,94 @@ internal static class ContainerDefaultCardModePatch
     private static Type _viewCharacterMenuItemsType;
     private static Type _viewExchangeBaseType;
     private static bool _typeLookupDone;
+    private static int _initializing;
+
+    internal static string GetPageKey(Component owner)
+    {
+        if (owner == null)
+            return null;
+
+        var current = owner.transform;
+        for (var depth = 0; current != null && depth < 12; depth++, current = current.parent)
+        {
+            if (current.GetComponent<ViewCharacterMenuItems>() != null)
+                return "CharacterMenuItems";
+            var exchange = current.GetComponent<ViewExchangeBase>();
+            if (exchange != null)
+                return "Exchange_" + exchange.GetType().Name;
+        }
+        return null;
+    }
+
+    private static string GetMemoryKey(ItemListScroll instance)
+    {
+        var page = GetPageKey(instance);
+        if (page == null || page == "CharacterMenuItems")
+            return page;
+
+        var current = instance.transform;
+        for (var depth = 0; current != null && depth < 12; depth++, current = current.parent)
+        {
+            var container = current.GetComponent<ExchangeContainer>();
+            if (container == null)
+                continue;
+            if (instance == container.selfItemList || instance == container.selfExchangeList)
+                return page + ":self";
+            if (instance == container.targetItemList || instance == container.targetExchangeList)
+                return page + ":target";
+        }
+        return null;
+    }
+
+    internal static int GetDesiredSwitchIndex(string key)
+    {
+        var saved = MemoryOptimizationSettingsStore.GetContainerCardMode(key);
+        // Read the contributor's preference only as a migration fallback. New
+        // changes use the Mod's existing atomic asynchronous JSON writer.
+        if (!saved.HasValue && !string.IsNullOrEmpty(key))
+        {
+            var separator = key.IndexOf(':');
+            var legacyKey = "BTS_CardMode_" + (separator < 0 ? key : key.Substring(0, separator));
+            if (PlayerPrefs.HasKey(legacyKey))
+            {
+                var value = PlayerPrefs.GetInt(legacyKey, -1);
+                if (value == 0 || value == 1)
+                {
+                    saved = value == 1;
+                    MemoryOptimizationSettingsStore.SetContainerCardMode(key, saved.Value);
+                }
+            }
+        }
+        return saved.HasValue && !saved.Value ? 0 : 1;
+    }
+
+    internal static void SaveCardMode(ItemListScroll instance)
+    {
+        if (_initializing != 0 || !ShouldUseDefaultCardMode(instance))
+            return;
+        MemoryOptimizationSettingsStore.SetContainerCardMode(GetMemoryKey(instance), instance.IsCardMode);
+    }
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(ItemListScroll), "Init")]
-    private static void InitPrefix(ItemListScroll __instance)
+    private static void InitPrefix(ItemListScroll __instance, out bool __state)
     {
-        if (!ShouldUseDefaultCardMode(__instance))
+        __state = ShouldUseDefaultCardMode(__instance);
+        if (!__state)
             return;
 
-        DefaultSwitchIndexField?.SetValue(__instance, 1);
-        NormalizeToggleGroup(BtnSwitchCardModeField?.GetValue(__instance), 1);
+        _initializing++;
+        var targetIndex = GetDesiredSwitchIndex(GetMemoryKey(__instance));
+        DefaultSwitchIndexField?.SetValue(__instance, targetIndex);
+        NormalizeToggleGroup(BtnSwitchCardModeField?.GetValue(__instance), targetIndex);
+    }
+
+    [HarmonyFinalizer]
+    [HarmonyPatch(typeof(ItemListScroll), "Init")]
+    private static void InitFinalizer(bool __state)
+    {
+        if (__state)
+            _initializing--;
     }
 
     [HarmonyPostfix]
@@ -1044,22 +1122,26 @@ internal static class ContainerDefaultCardModePatch
         if (instance == null || !Plugin.EnableContainerCompact || !Plugin.EnableDefaultContainerCardMode || !IsSupportedPage(instance))
             return false;
 
-        return CardScrollField == null || CardScrollField.GetValue(instance) != null;
+        return CardScrollField?.GetValue(instance) is Component card && card != null;
     }
 
     private static void EnsureDefaultCardMode(ItemListScroll instance)
     {
+        _initializing++;
         try
         {
-            if (!(IsCardModeField?.GetValue(instance) is bool isCardMode && isCardMode))
+            var targetIndex = GetDesiredSwitchIndex(GetMemoryKey(instance));
+            var targetIsCardMode = targetIndex == 1;
+            var isCardMode = instance.IsCardMode;
+            if (isCardMode != targetIsCardMode)
             {
                 if (SwitchCardModeToggleMethod != null)
                 {
-                    SwitchCardModeToggleMethod.Invoke(instance, new object[] { 1, 0 });
+                    SwitchCardModeToggleMethod.Invoke(instance, new object[] { targetIndex, isCardMode ? 1 : 0 });
                 }
                 else
                 {
-                    IsCardModeField?.SetValue(instance, true);
+                    IsCardModeField?.SetValue(instance, targetIsCardMode);
                     RefreshCardModeMethod?.Invoke(instance, null);
                 }
             }
@@ -1070,6 +1152,10 @@ internal static class ContainerDefaultCardModePatch
         catch (Exception ex)
         {
             Debug.LogWarning("[BetterTaiwuScroll] Failed to apply default card mode: " + ex);
+        }
+        finally
+        {
+            _initializing--;
         }
     }
 
@@ -1205,6 +1291,7 @@ internal static class ItemListScrollSwitchCardModeToggleCompactLayoutPatch
     private static void Postfix(ItemListScroll __instance)
     {
         ContainerCompactPatches.RegisterItemListScroll(__instance, rerender: false);
+        ContainerDefaultCardModePatch.SaveCardMode(__instance);
     }
 }
 
@@ -1235,7 +1322,8 @@ internal static class ViewCharacterMenuItemsDefaultCardModeTogglePatch
         if (!ContainerDefaultCardModePatch.IsFeatureEnabled())
             return;
 
-        ContainerDefaultCardModePatch.SetToggleGroupActiveWithoutNotify(TargetToggleGroupField?.GetValue(__instance) as CToggleGroup, 1);
+        ContainerDefaultCardModePatch.SetToggleGroupActiveWithoutNotify(TargetToggleGroupField?.GetValue(__instance) as CToggleGroup,
+            ContainerDefaultCardModePatch.GetDesiredSwitchIndex("CharacterMenuItems"));
     }
 
     private static void Postfix(ViewCharacterMenuItems __instance)
@@ -1243,7 +1331,8 @@ internal static class ViewCharacterMenuItemsDefaultCardModeTogglePatch
         if (!ContainerDefaultCardModePatch.IsFeatureEnabled())
             return;
 
-        ContainerDefaultCardModePatch.SetToggleGroupActiveWithoutNotify(TargetToggleGroupField?.GetValue(__instance) as CToggleGroup, 1);
+        ContainerDefaultCardModePatch.SetToggleGroupActiveWithoutNotify(TargetToggleGroupField?.GetValue(__instance) as CToggleGroup,
+            ContainerDefaultCardModePatch.GetDesiredSwitchIndex("CharacterMenuItems"));
     }
 }
 
@@ -1265,7 +1354,12 @@ internal static class ExchangeContainerDefaultCardModeTogglePatch
         if (container == null || !ContainerDefaultCardModePatch.IsFeatureEnabled())
             return;
 
-        ContainerDefaultCardModePatch.SetToggleGroupActiveWithoutNotify(container.targetToggleGroup, 1);
-        ContainerDefaultCardModePatch.SetToggleGroupActiveWithoutNotify(container.selfToggleGroup, 1);
+        var page = ContainerDefaultCardModePatch.GetPageKey(container);
+        if (page == null)
+            return;
+        ContainerDefaultCardModePatch.SetToggleGroupActiveWithoutNotify(container.targetToggleGroup,
+            ContainerDefaultCardModePatch.GetDesiredSwitchIndex(page + ":target"));
+        ContainerDefaultCardModePatch.SetToggleGroupActiveWithoutNotify(container.selfToggleGroup,
+            ContainerDefaultCardModePatch.GetDesiredSwitchIndex(page + ":self"));
     }
 }

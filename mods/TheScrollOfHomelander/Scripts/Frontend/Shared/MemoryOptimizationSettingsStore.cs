@@ -39,6 +39,7 @@ namespace BetterTaiwuScroll.Frontend;
 [Serializable]
 public sealed class MemoryOptimizationSettings
 {
+    public List<ContainerCardModeMemoryEntry> ContainerCardModes = new List<ContainerCardModeMemoryEntry>();
     public List<FilterMemoryEntry> FilterMemories = new List<FilterMemoryEntry>();
     public List<SortMemoryEntry> SortMemories = new List<SortMemoryEntry>();
     public List<StrategyPresetMemoryEntry> StrategyPresetMemories = new List<StrategyPresetMemoryEntry>();
@@ -55,6 +56,8 @@ public sealed class MemoryOptimizationSettings
 
     internal void Normalize()
     {
+        ContainerCardModes ??= new List<ContainerCardModeMemoryEntry>();
+        ContainerCardModes.RemoveAll(entry => entry == null || string.IsNullOrEmpty(entry.Key));
         FilterMemories ??= new List<FilterMemoryEntry>();
         SortMemories ??= new List<SortMemoryEntry>();
         StrategyPresetMemories ??= new List<StrategyPresetMemoryEntry>();
@@ -114,6 +117,13 @@ public sealed class MemoryOptimizationSettings
             HasMakeSubtypeLastSelection = false;
         MakeSubtypeLastSubtypeName ??= string.Empty;
     }
+}
+
+[Serializable]
+public sealed class ContainerCardModeMemoryEntry
+{
+    public string Key;
+    public bool IsCardMode;
 }
 
 [Serializable]
@@ -531,6 +541,29 @@ internal static class MemoryOptimizationSettingsStore
         return entry;
     }
 
+    internal static bool? GetContainerCardMode(string key)
+    {
+        if (string.IsNullOrEmpty(key))
+            return null;
+        return Current.ContainerCardModes.Find(entry => entry.Key == key)?.IsCardMode;
+    }
+
+    internal static void SetContainerCardMode(string key, bool isCardMode)
+    {
+        if (string.IsNullOrEmpty(key))
+            return;
+        var entry = Current.ContainerCardModes.Find(item => item.Key == key);
+        if (entry != null && entry.IsCardMode == isCardMode)
+            return;
+        if (entry == null)
+        {
+            entry = new ContainerCardModeMemoryEntry { Key = key };
+            Current.ContainerCardModes.Add(entry);
+        }
+        entry.IsCardMode = isCardMode;
+        Save();
+    }
+
     internal static void SetFilterMemory(FilterMemoryEntry entry)
     {
         if (entry == null || string.IsNullOrEmpty(entry.Key))
@@ -937,6 +970,11 @@ internal static class MemoryOptimizationSettingsStore
     {
         return new MemoryOptimizationSettings
         {
+            ContainerCardModes = Current.ContainerCardModes.Select(entry => new ContainerCardModeMemoryEntry
+            {
+                Key = entry.Key,
+                IsCardMode = entry.IsCardMode
+            }).ToList(),
             FilterMemories = Current.FilterMemories.Select(CloneFilter).ToList(),
             SortMemories = Current.SortMemories.Select(entry => new SortMemoryEntry
             {

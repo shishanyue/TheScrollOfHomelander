@@ -131,7 +131,7 @@ internal static class FilterMemoryController
 {
     private static bool _applying;
     private static readonly MethodInfo ItemListScrollRefreshListMethod =
-        AccessTools.Method(typeof(ItemListScroll), "RefreshList");
+        AccessTools.Method(typeof(ItemListScroll), "RefreshList", new[] { typeof(bool) });
     private static readonly FieldInfo ItemListSortAndFilterField =
         AccessTools.Field(typeof(ItemListScroll), "sortAndFilter");
     private static readonly ConditionalWeakTable<ItemListScroll, ItemListFilterCache> ItemListFilters =
@@ -384,7 +384,9 @@ internal static class FilterMemoryController
             // list. ViewWarehouse obtains its cache asynchronously, so that callback can read
             // a null cache while the warehouse is opening or rebuilding. RefreshList performs
             // the same filter generation for this list without touching the parent view.
-            ItemListScrollRefreshListMethod?.Invoke(itemListScroll, null);
+            // Reflection does not supply C# optional arguments. The current game
+            // declares RefreshList(bool keepSelectedIndex = false).
+            ItemListScrollRefreshListMethod?.Invoke(itemListScroll, new object[] { false });
         }
         catch (Exception ex)
         {
