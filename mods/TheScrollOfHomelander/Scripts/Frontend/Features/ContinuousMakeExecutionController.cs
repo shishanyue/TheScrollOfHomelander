@@ -769,10 +769,13 @@ internal static partial class ContinuousMakeExecutionController
 
         if (page != null)
         {
-            // The panel's 制作 button was repurposed while the batch ran; hand it back to the
-            // game so a normal click works again.
+            PendingMaterialSlotCleanupPages.Remove(page);
+            // Local consumption/data reload invalidates the preceding preview. Discard
+            // its late callbacks and refill the native cache before handing crafting back.
+            MakePreviewRequest.Cancel(page);
             RestoreConfirmButton(page);
             RefreshMakeCondition(page);
+            MakePreviewRequest.RefreshConfirmState(page);
         }
     }
 

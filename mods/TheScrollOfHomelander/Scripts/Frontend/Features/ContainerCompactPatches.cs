@@ -443,6 +443,10 @@ internal static class ContainerCompactPatches
         if (kind == TargetKind.None)
             return;
 
+        // Since 1.1.27 the card view owns pooled grouped rows, not an InfinityScroll.
+        // Keep the legacy scroll path for the detail view and older skill containers.
+        GroupedContainerCompactSupport.RegisterItemList(itemListScroll, rerender);
+
         InfinityScroll infinityScroll;
         try
         {
@@ -508,6 +512,16 @@ internal static class ContainerCompactPatches
             Kind = kind,
         });
         return kind;
+    }
+
+    internal static int ResolveItemListLineCount(ItemListScroll itemListScroll)
+    {
+        return ResolveTargetKind(itemListScroll) switch
+        {
+            TargetKind.Inventory => Plugin.InventoryContainerLineCount,
+            TargetKind.Exchange => Plugin.ExchangeContainerLineCount,
+            _ => 0,
+        };
     }
 
     private static TargetKind DetectTargetKind(ItemListScroll itemListScroll)
@@ -605,6 +619,7 @@ internal static class ContainerCompactPatches
         }
 
         EquipCombatSkillGroupedSkillScrollCompactPatch.RefreshAllActive(allowRestore);
+        GroupedContainerCompactSupport.RefreshAllActive();
     }
 
     private sealed class OriginalInfinityLayout
@@ -647,6 +662,7 @@ internal static class EquipCombatSkillGroupedSkillScrollCompactPatch
     private static Type _groupedSkillScrollType;
     private static FieldInfo _scrollViewField;
     private static FieldInfo _itemTemplateField;
+    private static FieldInfo _rowTemplateField;
     private static bool _typeLookupDone;
 
     [HarmonyTargetMethods]
@@ -695,6 +711,10 @@ internal static class EquipCombatSkillGroupedSkillScrollCompactPatch
             return;
 
         EnsureTypes();
+        // The new grouped-row controller is handled by GroupedContainerCompactSupport.
+        // Never apply the old per-cell GridLayoutGroup strategy to its row container.
+        if (_rowTemplateField != null)
+            return;
         var scrollView = _scrollViewField?.GetValue(groupedSkillScroll) as LoopVerticalScrollRect;
         if (scrollView == null)
             return;
@@ -963,6 +983,7 @@ internal static class EquipCombatSkillGroupedSkillScrollCompactPatch
 
         _scrollViewField = AccessTools.Field(_groupedSkillScrollType, "scrollView");
         _itemTemplateField = AccessTools.Field(_groupedSkillScrollType, "itemTemplate");
+        _rowTemplateField = AccessTools.Field(_groupedSkillScrollType, "rowTemplate");
     }
 
     private sealed class OriginalLoopGridLayout
@@ -1298,9 +1319,13 @@ internal static class ItemListScrollSwitchCardModeToggleCompactLayoutPatch
 [HarmonyPatch(typeof(ItemListScroll), "HighLightItemView")]
 internal static class ItemListScrollHighlightCompactScalePatch
 {
-    private static void Prefix(RowItem itemView, out Vector3 __state)
+    private static void Prefix(ItemListScroll __instance, RowItem itemView, out Vector3 __state)
     {
         __state = itemView == null ? Vector3.one : itemView.transform.localScale;
+        // The grouped card's compact scale lives on its content parent. Vanilla
+        // reparents the highlighted card to an unscaled mask and resets its scale.
+        if (GroupedContainerCompactSupport.TryGetHighlightScale(__instance, itemView, out var highlightScale))
+            __state = highlightScale;
     }
 
     private static void Postfix(RowItem itemView, Vector3 __state)

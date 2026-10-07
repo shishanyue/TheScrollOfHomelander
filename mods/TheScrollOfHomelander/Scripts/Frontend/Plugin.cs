@@ -180,6 +180,7 @@ public sealed class Plugin : TaiwuRemakePlugin
     public override void Dispose()
     {
         ModSession.Shutdown();
+        GroupedContainerCompactSupport.RestoreAll();
         _patchGroups.Dispose();
         AsyncSettingsSaveQueue.Shutdown();
         GradeColorOptimizationSupport.Restore();

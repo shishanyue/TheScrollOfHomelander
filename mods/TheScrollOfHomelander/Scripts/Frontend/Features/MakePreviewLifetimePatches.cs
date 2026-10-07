@@ -44,7 +44,11 @@ internal static class MakePreviewRequestScopePatch
 
 internal sealed class MakePreviewRequest
 {
-    private sealed class Epoch { internal int Value; internal MakePreviewRequest Request; }
+    private sealed class Epoch
+    {
+        internal readonly MakePreviewBarrier Barrier = new();
+        internal MakePreviewRequest Request;
+    }
     private static readonly ConditionalWeakTable<MakeSubPageMake, Epoch> Epochs = new();
     private static readonly FieldInfo Material = AccessTools.Field(typeof(MakeSubPageMake), "materialSlot");
     private static readonly FieldInfo Target = AccessTools.Field(typeof(MakeSubPageMake), "targetSlot");
@@ -52,21 +56,18 @@ internal sealed class MakePreviewRequest
     private static readonly PropertyInfo CurrentResult = AccessTools.Property(typeof(MakeSubPageMake), "CurMakeResult");
     private static readonly FieldInfo PendingCoroutine = AccessTools.Field(typeof(MakeSubPageMake), "_coroutineRequestMakeResult");
     private readonly MakeSubPageMake _page;
-    private readonly Epoch _epoch;
-    private readonly int _version;
+    private readonly MakePreviewBarrier.Request _request;
     private readonly Func<bool> _ownerCurrent;
     private readonly ItemDisplayData _material;
     private readonly ItemDisplayData _target;
     private readonly MakeRecipeSnapshot _recipe;
-    private bool _finishedStale;
-    private int _pendingCallbacks;
 
     internal MakePreviewRequest(MakeSubPageMake page)
     {
         _page = page;
-        _epoch = Epochs.GetValue(page, _ => new Epoch());
-        _version = ++_epoch.Value;
-        _epoch.Request = this;
+        var epoch = Epochs.GetValue(page, _ => new Epoch());
+        _request = epoch.Barrier.Begin();
+        epoch.Request = this;
         _ownerCurrent = MakeExecutionLifetime.Capture(page);
         _material = Read(Material);
         _target = Read(Target);
@@ -78,8 +79,10 @@ internal sealed class MakePreviewRequest
     internal static void Cancel(MakeSubPageMake page)
     {
         if (Epochs.TryGetValue(page, out var epoch))
-            epoch.Value++;
-        Epochs.Remove(page);
+        {
+            epoch.Barrier.Invalidate();
+            epoch.Request = null;
+        }
         if (PendingCoroutine.GetValue(page) is Coroutine routine)
             page.StopCoroutine(routine);
         PendingCoroutine.SetValue(page, null);
@@ -88,24 +91,36 @@ internal sealed class MakePreviewRequest
 
     internal AsyncMethodCallbackDelegate Wrap(AsyncMethodCallbackDelegate callback)
     {
-        _pendingCallbacks++;
+        _request.AddCallback();
         return (offset, pool) =>
         {
-            if (!_ownerCurrent() || _epoch.Value != _version || _finishedStale) return;
+            if (!_ownerCurrent() || !_request.IsCurrent) return;
             if (!_recipe.IsCurrent() || (MakeSubPageMakeHelper.CheckIsRandomMake(_target)
                 && (_material == null || _material.Amount <= 0)))
             {
-                _finishedStale = true;
+                _request.MarkStale();
                 (Results.GetValue(_page) as Dictionary<int, Dictionary<int, MakeResult>>)?.Clear();
                 MakeGameApi.Refresh(_page, false);
                 // Refresh(false) only redraws the UI; it does not refill the cache.
                 if (Read(Material)?.Amount > 0)
-                    MakePageDeferredActionQueue.RequestCheckCondition(_page);
+                    RequestRefresh(_page);
                 return;
             }
-            _pendingCallbacks--;
-            callback(offset, pool);
+            if (_request.TryAcceptCallback()) callback(offset, pool);
         };
+    }
+
+    internal static void RequestRefresh(MakeSubPageMake page)
+    {
+        if (page == null || page.gameObject == null || !page.gameObject.activeInHierarchy
+            || ((Material.GetValue(page) as MakeTargetSlot)?.ItemData?.Amount ?? 0) <= 0)
+            return;
+        var epoch = Epochs.GetValue(page, _ => new Epoch());
+        if (epoch.Request != null && epoch.Request._request.IsCurrent
+            && epoch.Request._recipe.IsCurrent())
+            return;
+        if (epoch.Barrier.TryQueueRefresh())
+            MakePageDeferredActionQueue.RequestCheckCondition(page);
     }
 
     internal static bool CanSubmit(MakeSubPageMake page)
@@ -117,7 +132,7 @@ internal sealed class MakePreviewRequest
         if (!Epochs.TryGetValue(page, out var epoch) || epoch.Request == null)
             return false;
         var request = epoch.Request;
-        if (request._finishedStale || request._pendingCallbacks != 0 || !request._recipe.IsCurrent())
+        if (!request._request.IsReady || !request._recipe.IsCurrent())
             return false;
         var traverse = Traverse.Create(page);
         var subTypes = traverse.Field("_makeItemSubtypeIdList").GetValue<List<short>>();
@@ -137,10 +152,11 @@ internal sealed class MakePreviewRequest
             && Plugin.IsEnabledForLifeSkill(view.CurLifeSkillType)
             && ContinuousMakeExecutionController.IsBatchActive(view);
 
-        // Outside a batch the game owns this button, including its interactable state and its
-        // tooltip. Disabling it while the preview was stale is what made normal crafting look
-        // dead, so only the batch path is allowed to manage it here.
-        if (!batchActive)
+        // Fixed targets never read CurMakeResult. Random targets must wait for their
+        // native preview even after a batch stops or the continuous checkbox is off.
+        var needsPreview = view != null && Plugin.IsEnabledForLifeSkill(view.CurLifeSkillType)
+            && MakeSubPageMakeHelper.CheckIsRandomMake((Target.GetValue(page) as MakeTargetSlot)?.ItemData);
+        if (!batchActive && !needsPreview)
             return;
 
         var submitting = MakeSubmissionRequest.IsPending(page);
@@ -164,8 +180,8 @@ internal sealed class MakePreviewRequest
         // Only a stale context needs a new request; a current invalid result does not.
         if (!submitting && (Material.GetValue(page) as MakeTargetSlot)?.ItemData?.Amount > 0
             && (!Epochs.TryGetValue(page, out var epoch) || epoch.Request == null
-                || epoch.Request._finishedStale || !epoch.Request._recipe.IsCurrent()))
-            MakePageDeferredActionQueue.RequestCheckCondition(page);
+                || !epoch.Request._request.IsCurrent || !epoch.Request._recipe.IsCurrent()))
+            RequestRefresh(page);
     }
 }
 
@@ -192,21 +208,8 @@ internal static class MakePreviewConfirmReadyPatch
             && Plugin.IsEnabledForLifeSkill(view.CurLifeSkillType)
             && ContinuousMakeExecutionController.IsBatchActive(view);
 
-        // Normal crafting belongs to the game: never swallow the click. At worst the game
-        // answers with its own current result, which is exactly the vanilla behaviour.
-        if (!batchActive)
-        {
-            if (MakePreviewRequest.CanSubmit(__instance))
-            {
-                CurrentSubmission = new MakeSubmissionRequest(__instance);
-                return true;
-            }
-
-            // A batch crafts round after round from the preview, so there the freshness guard
-            // still matters: refresh and let the player retry instead of consuming a stale one.
-            MakePageDeferredActionQueue.RequestCheckCondition(__instance);
+        if (!batchActive && (view == null || !Plugin.IsEnabledForLifeSkill(view.CurLifeSkillType)))
             return true;
-        }
 
         if (MakePreviewRequest.CanSubmit(__instance))
         {
@@ -214,7 +217,11 @@ internal static class MakePreviewConfirmReadyPatch
             return true;
         }
 
-        MakePageDeferredActionQueue.RequestCheckCondition(__instance);
+        // Native confirmation copies the preview's template IDs before its async
+        // condition check. A missing preview is default(MakeResult), whose template
+        // zero is a real poison/food, so it must never reach the native submit path.
+        MakePreviewRequest.RequestRefresh(__instance);
+        MakePreviewRequest.RefreshConfirmState(__instance);
         return false;
     }
 

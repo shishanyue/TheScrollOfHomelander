@@ -48,7 +48,7 @@ dotnet build ./mods/TheScrollOfHomelander/Checks/CraftingResults/CraftingResults
 
 ## 覆盖与验收
 
-15 项离线检查覆盖缺失/未初始化结果、越界阶段、造诣不足、错误物品类型、过期配方、
+19 项离线检查覆盖缺失/未初始化结果、越界阶段、造诣不足、错误物品类型、过期配方、
 手动选择、随机池一致性，以及合法模板 `0` 不被全局禁用。
 这些检查不验证 Unity 界面或真实制作流程。
 
@@ -68,3 +68,24 @@ dotnet build ./mods/TheScrollOfHomelander/Checks/CraftingResults/CraftingResults
 （前端 `Assembly-CSharp.dll`，token `0x06006B45`）仍为原生单次提交。
 Mod 的 `ContinuousMakeConfirmPatch` 在最高优先级 Prefix 中将勾选模式路由到
 现有 `TryStartConfiguredBatch`，与独立批量按钮共用执行、刷新续作及停止流程。
+
+## 2026-10-07：药房停止后产物变成下九品毒
+
+当前游戏的随机制作在 `OnClickButtonConfirm()` 里先读取 `CurMakeResult` 的模板编号，
+然后才发送制作条件检查。`GetMakeResult(int)` 缺少缓存时返回 `default(MakeResult)`，
+其目标模板编号为 `0`；药品类型为 `8`，不能用这个未初始化编号作为实际产物。
+停止批量时取消旧预览及回调并清理残留的材料槽清理标记，重绘后合并请求新的原生预览。
+普通随机制作也会拒绝缺失、未完成或过期预览，补齐后恢复可制作状态；不会自动重放被拒绝的点击。
+固定目标无需随机预览，制作优化关闭时保持原生确认路径。
+
+本次通过仓库 DecompilerWorker 阅读前端 `Assembly-CSharp.dll` 的
+`Game.Views.Make.MakeSubPageMake` 461–510（刷新和槽重载）、745–772（选材）、
+1666–1716（条件与结果回调）、1907–1993（原生确认）、2086–2150（预览请求和缓存查询）。
+已核对 token：`CheckCondition(bool)=0x06006B3F`、`OnGetMakeResult(bool)=0x06006B41`、
+`OnClickButtonConfirm()=0x06006B45`、`RequestMakeResult()=0x06006B4D`、
+`GetMakeResult(int)=0x06006B4E`。这些 token 仅对应本次安装 DLL。
+
+[CraftingPreview](../CraftingPreview/README.md) 的另外 19 项独立检查覆盖停止后立刻确认、
+旧响应晚到、配方更换、完整回调屏障及补齐请求去重，不启动 Unity。
+用户手动验收时在药房分别于选材、预览等待、已制作一轮后停止，再取消连续勾选并手动制作；
+确认当前药品配方、品级和材料正确，并验证固定配方、关闭制作优化及反复开关界面的原版路径。

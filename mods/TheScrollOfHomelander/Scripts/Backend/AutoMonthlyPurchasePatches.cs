@@ -11,6 +11,7 @@ using GameData.Domains.Character;
 using GameData.Domains.Item;
 using GameData.Domains.Item.Display;
 using GameData.Domains.Map;
+using GameData.Domains.Merchant;
 using GameData.Domains.Taiwu;
 using GameData.Domains.Taiwu.Display;
 using GameData.Domains.Taiwu.ExchangeSystem;
@@ -144,7 +145,11 @@ internal static class AutoMonthlyPurchaseService
 
     internal static void Run(DataContext context)
     {
-        var settings = AutoMonthlyPurchaseSettingsStore.Load();
+        Run(context, AutoMonthlyPurchaseSettingsStore.Load());
+    }
+
+    internal static void Run(DataContext context, AutoMonthlyPurchaseSettings settings)
+    {
         if (!settings.AutoPurchaseGroupMerchants)
             return;
 
@@ -171,26 +176,44 @@ internal static class AutoMonthlyPurchaseService
 
             var merchantCount = 0;
             var purchasedCount = 0;
+            var failedMerchantCount = 0;
             var inventoryLimitReached = false;
-            var groupCharIds = DomainManager.Taiwu.GetGroupCharIds().GetCollection();
+            // Shop generation and settlement can trigger domain callbacks. Enumerate a
+            // snapshot so a companion joining/leaving cannot abort the remaining shops.
+            var groupCharIds = new List<int>(DomainManager.Taiwu.GetGroupCharIds().GetCollection());
+            var visitedCharIds = new HashSet<int>();
             foreach (var charId in groupCharIds)
             {
-                if (!IsValidGroupMerchant(context, charId))
+                if (!visitedCharIds.Add(charId))
                     continue;
 
-                merchantCount++;
-                var result = PurchaseFromMerchant(context, charId, targetSource, settings);
-                purchasedCount += result.SelectedCount;
-                if (!result.InventoryLimitReached)
-                    continue;
+                try
+                {
+                    if (!IsValidGroupMerchant(context, charId))
+                        continue;
 
-                inventoryLimitReached = true;
-                break;
+                    merchantCount++;
+                    var result = PurchaseFromMerchant(context, charId, targetSource, settings);
+                    purchasedCount += result.SelectedCount;
+                    if (!result.InventoryLimitReached)
+                        continue;
+
+                    inventoryLimitReached = true;
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    failedMerchantCount++;
+                    AdaptableLog.Error(
+                        "[BetterTaiwuScroll] Auto monthly purchase failed for merchant="
+                        + charId + "; continuing with remaining companions: " + ex);
+                }
             }
 
             AdaptableLog.Info(
                 "[BetterTaiwuScroll] Auto monthly purchase finished: merchants=" + merchantCount
                 + ", purchased=" + purchasedCount
+                + ", failedMerchants=" + failedMerchantCount
                 + ", target=" + targetSource
                 + ", industryTile=" + isIndustryTile
                 + ", inventoryLimitReached=" + inventoryLimitReached + ".");
@@ -215,6 +238,8 @@ internal static class AutoMonthlyPurchaseService
     {
         if (charId == DomainManager.Taiwu.GetTaiwuCharId())
             return false;
+        if (!DomainManager.Taiwu.GetGroupCharIds().Contains(charId))
+            return false;
 
         if (!DomainManager.Character.TryGetElement_Objects(
                 charId,
@@ -223,12 +248,17 @@ internal static class AutoMonthlyPurchaseService
         if (character.GetAgeGroup() == 0)
             return false;
 
-        var merchantType = DomainManager.Taiwu.GetMerchantType(charId);
-        if (merchantType < 0 || merchantType >= 7)
-            return false;
-
-        var merchantData = DomainManager.Merchant.GetMerchantData(context, charId);
-        return merchantData != null && merchantData.CharId == charId;
+        // Taiwu.GetMerchantType reports the designated villager occupation, where 7
+        // also means "choose automatically". The shop uses the actual merchant map.
+        if (!DomainManager.Extra.TryGetMerchantCharToType(charId, out var merchantType))
+        {
+            // This native resolver validates organization/occupation and repairs a
+            // missing identity map; it does not generate a shop or any merchandise.
+            if (DomainManager.Merchant.GetOrCreateMerchantTemplateId(context, charId) < 0
+                || !DomainManager.Extra.TryGetMerchantCharToType(charId, out merchantType))
+                return false;
+        }
+        return merchantType >= 0 && merchantType < 7;
     }
 
     private static PurchaseResult PurchaseFromMerchant(
@@ -248,9 +278,15 @@ internal static class AutoMonthlyPurchaseService
         };
         var shopData = DomainManager.Taiwu.GetShopDisplayData(context, shopArguments);
         var exchange = shopData?.Exchange;
-        if (exchange == null || exchange.TradeArguments == null)
+        if (exchange?.TradeArguments?.MerchantData == null
+            || exchange.MerchantData.CharId != merchantCharId
+            || exchange.TradeArguments.OverFavorData?.MerchantOverFavorLevelDataArray == null)
             return PurchaseResult.Empty;
 
+        // GetShopDisplayData returns the same domain object as both the baseline and
+        // preview debt. Unlike a serialized frontend exchange, this needs a copy.
+        exchange.TradeArguments.OverFavorData =
+            (MerchantOverFavorData)exchange.TradeArguments.OverFavorData.Clone();
         exchange.SetItemSource((sbyte)targetSource);
         var selection = new PurchaseSelectionState();
         if (IsInventoryLimitReached(exchange, targetSource, settings))
@@ -264,6 +300,17 @@ internal static class AutoMonthlyPurchaseService
             selection);
         if (selectedCount <= 0)
             return new PurchaseResult(0, selection.InventoryLimitReached);
+
+        // Match ViewShop.Refresh before submitting: native confirmation does not
+        // check affordability or update the limited-purchase debt on our behalf.
+        exchange.RefreshDebt();
+        if (!exchange.CanConfirmExchange)
+        {
+            AdaptableLog.Warning(
+                "[BetterTaiwuScroll] Auto monthly purchase skipped invalid exchange for merchant="
+                + merchantCharId + ".", false);
+            return PurchaseResult.Empty;
+        }
 
         DomainManager.Taiwu.ConfirmShopExchange(context, exchange);
         return new PurchaseResult(selectedCount, selection.InventoryLimitReached);
@@ -308,6 +355,7 @@ internal static class AutoMonthlyPurchaseService
 
                 exchange.SelectTargetItem(item, count);
                 selectedCount += count;
+                selection.InventoryLimitReached = IsInventoryLimitReached(exchange, targetSource, settings);
                 if (selection.InventoryLimitReached)
                     break;
             }
@@ -359,6 +407,7 @@ internal static class AutoMonthlyPurchaseService
         if (count <= 0)
             return 0;
 
+        count = LimitByFunds(exchange, item, count);
         count = LimitByInventoryLoad(exchange, item, count, targetSource, settings, selection);
         if (count <= 0)
             return 0;
@@ -387,21 +436,29 @@ internal static class AutoMonthlyPurchaseService
             return 0;
         }
 
-        var itemWeight = ItemTemplateHelper.GetBaseWeight(item.RealKey.ItemType, item.RealKey.TemplateId);
+        var itemWeight = item.Weight;
         if (itemWeight <= 0)
             return count;
 
         var capacityCount = remainingLoad / itemWeight;
         if (capacityCount <= 0)
-        {
-            selection.InventoryLimitReached = true;
             return 0;
-        }
-        if (capacityCount >= count)
+
+        // One heavy stack failing to fit does not fill the bag. Later items or
+        // companions may sell lighter materials that still fit the remaining load.
+        return Math.Min(count, capacityCount);
+    }
+
+    private static int LimitByFunds(ShopExchange exchange, ITradeableContent item, int count)
+    {
+        var unitPrice = exchange.CalcBaseValue(item);
+        if (unitPrice <= 0)
             return count;
 
-        selection.InventoryLimitReached = true;
-        return capacityCount;
+        var remainingMoney = exchange.TaiwuValueBase - exchange.TotalValueWithAdvantage;
+        if (remainingMoney <= 0)
+            return 0;
+        return (int)Math.Min(count, remainingMoney / unitPrice);
     }
 
     private static bool IsInventoryLimitReached(
