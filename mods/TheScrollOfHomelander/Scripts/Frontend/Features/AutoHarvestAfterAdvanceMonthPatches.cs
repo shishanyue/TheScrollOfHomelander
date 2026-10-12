@@ -89,7 +89,9 @@ internal static class AutoHarvestAfterAdvanceMonthController
 
     internal static void MarkPending(bool saveWorld)
     {
-        if (!saveWorld || !Enabled)
+        // saveWorld controls autosaving only. The native method completes the
+        // month even when saving is skipped, disabled, or unavailable.
+        if (!Enabled || _pending || _running)
             return;
 
         _pending = true;
@@ -105,6 +107,7 @@ internal static class AutoHarvestAfterAdvanceMonthController
         // YieldHelper and AsyncMethodDispatcher are recreated while changing worlds.
         // Discard scheduling/running state from the previous world before queuing the
         // one-shot load harvest for the newly initialized archive.
+        _run++;
         _pending = true;
         _scheduled = false;
         _running = false;
@@ -126,9 +129,10 @@ internal static class AutoHarvestAfterAdvanceMonthController
 
         _scheduled = true;
         var session = ModSession.Generation;
+        var run = _run;
         SingletonObject.getInstance<YieldHelper>().DelayFrameDo(delayFrames, delegate
         {
-            if (!ModSession.IsCurrent(session)) return;
+            if (!ModSession.IsCurrent(session) || run != _run) return;
             _scheduled = false;
             TryRunWhenReady();
         });
@@ -161,8 +165,8 @@ internal static class AutoHarvestAfterAdvanceMonthController
         {
             if (++_waitChecks <= MaxWaitChecks)
                 ScheduleCheck(5u);
-            else
-                _pending = false;
+            // A long save can outlast the frame polling budget. Keep this run
+            // pending; the subscribed world-state events will wake it when ready.
             return;
         }
 

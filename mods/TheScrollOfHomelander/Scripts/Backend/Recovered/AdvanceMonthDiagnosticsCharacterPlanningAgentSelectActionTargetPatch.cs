@@ -11,7 +11,8 @@ namespace BetterTaiwuScroll.Backend;
 	typeof(DataContext),
 	typeof(PlanningGoalNode),
 	typeof(PlanningActionNode),
-	typeof(ContextArgGroupHandle)
+	typeof(ContextArgGroupHandle),
+	typeof(bool)
 })]
 internal static class AdvanceMonthDiagnosticsCharacterPlanningAgentSelectActionTargetPatch
 {

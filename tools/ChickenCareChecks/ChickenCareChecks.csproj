@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <AutoCultivationSource Condition="'$(AutoCultivationSource)' == ''">../../mods/TheScrollOfHomelander/Scripts/Backend/AutoCultivationPatches.cs</AutoCultivationSource>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="$(AutoCultivationSource)" Link="AutoCultivationPatches.cs" />
+  </ItemGroup>
+</Project>

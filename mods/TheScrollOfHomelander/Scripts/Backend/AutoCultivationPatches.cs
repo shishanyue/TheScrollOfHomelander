@@ -195,7 +195,7 @@ internal static class AutoCultivationAdvanceMonthPatch
 
     private static void FeedChickens(DataContext context, AutoChickenCareSettings settings, Location settlementLocation)
     {
-        if (settings.HappinessThreshold <= 0 || (!settings.UseTrough && !settings.UseWarehouse && !settings.UseInventory))
+        if (!settings.Enabled || settings.HappinessThreshold <= 0 || (!settings.UseTrough && !settings.UseWarehouse && !settings.UseInventory))
             return;
         if (FeedChickenWithArgsMethod == null)
         {
@@ -211,34 +211,32 @@ internal static class AutoCultivationAdvanceMonthPatch
         if (settlement == null)
             return;
         const sbyte fulongSectId = 14;
-        if (DomainManager.Story.GetSectMainStoryTaskStatus(fulongSectId) == 0
+        var fulongStateUnavailable = DomainManager.Story.GetSectMainStoryTaskStatus(fulongSectId) == 0
             && DomainManager.Taiwu.GetTaiwuVillageLocation().Equals(settlement.GetLocation())
-            && DomainManager.Extra.GetSectMainStoryEventArgBox(fulongSectId) == null)
-        {
-            AdaptableLog.Warning("[BetterTaiwuScroll] Auto chicken care skipped: Fulong story state is unavailable after month settlement.", false);
-            return;
-        }
+            && DomainManager.Extra.GetSectMainStoryEventArgBox(fulongSectId) == null;
 
-        var chickenIds = DomainManager.Building.GetSettlementChickenList(settlement.GetId(), false);
+        // Without the optional story data the native filter dereferences null.
+        // Continue caring for ordinary chickens, but conservatively exclude the king.
+        var chickenIds = DomainManager.Building.GetSettlementChickenList(settlement.GetId(), fulongStateUnavailable);
         if (chickenIds == null || chickenIds.Count == 0)
             return;
-        var chickens = chickenIds.Where(id => id > 0).Distinct()
-            .Select(id => DomainManager.Building.GetChickenData(id)).ToList();
         var fedCount = 0;
         var usedItems = 0;
-        foreach (var chicken in chickens.Where(chicken => chicken.Id > 0).OrderBy(chicken => chicken.Id))
+        foreach (var chickenId in chickenIds.Where(id => id >= 0).Distinct().OrderBy(id => id).ToArray())
         {
-            var current = chicken;
             var fedThisChicken = false;
-            while (current.Id > 0 && current.Happiness < settings.HappinessThreshold)
+            // Id zero is valid; GetChickenData returns a default struct for missing ids.
+            while (DomainManager.Building.TryGetElement_Chicken(chickenId, out var current)
+                && current.Id == chickenId && current.CurrentSettlementId == settlement.GetId()
+                && (!fulongStateUnavailable || current.TemplateId != 63)
+                && current.Happiness < settings.HappinessThreshold)
             {
                 if (!TrySelectFeedItem(settings, out var key, out var source))
                     break;
-                if (!FeedOneChicken(context, current.TemplateId, key, source))
+                if (!FeedOneChicken(context, current, key, source))
                     break;
                 usedItems++;
                 fedThisChicken = true;
-                current = DomainManager.Building.GetChickenData(current.Id);
             }
             if (fedThisChicken)
                 fedCount++;
@@ -267,13 +265,14 @@ internal static class AutoCultivationAdvanceMonthPatch
         {
             var items = DomainManager.Character.GetAllInventoryItems(DomainManager.Taiwu.GetTaiwuCharId());
             key = items
-                .Where(item => item != null && item.Amount > 0 && GameData.Domains.Building.SharedMethods.CheckItemCanFeedChicken(item.RealKey))
+                .Where(item => item != null && item.Amount > 0 && item.RealKey.IsValid()
+                    && GameData.Domains.Building.SharedMethods.CheckItemCanFeedChicken(item.RealKey))
                 .OrderBy(item => ItemTemplateHelper.GetGrade(item.RealKey.ItemType, item.RealKey.TemplateId))
                 .ThenBy(item => item.RealKey.ItemType)
                 .ThenBy(item => item.RealKey.TemplateId)
                 .ThenBy(item => item.RealKey.Id)
                 .Select(item => item.RealKey)
-                .FirstOrDefault();
+                .DefaultIfEmpty(ItemKey.Invalid).First();
             if (key.IsValid())
             {
                 source = ItemSourceType.Inventory;
@@ -289,31 +288,51 @@ internal static class AutoCultivationAdvanceMonthPatch
     private static bool TrySelectFromDictionary(Dictionary<ItemKey, int> items, out ItemKey key)
     {
         key = items
-            .Where(pair => pair.Value > 0 && GameData.Domains.Building.SharedMethods.CheckItemCanFeedChicken(pair.Key))
+            .Where(pair => pair.Value > 0 && pair.Key.IsValid()
+                && GameData.Domains.Building.SharedMethods.CheckItemCanFeedChicken(pair.Key))
             .OrderBy(pair => ItemTemplateHelper.GetGrade(pair.Key.ItemType, pair.Key.TemplateId))
             .ThenBy(pair => pair.Key.ItemType)
             .ThenBy(pair => pair.Key.TemplateId)
             .ThenBy(pair => pair.Key.Id)
             .Select(pair => pair.Key)
-            .FirstOrDefault();
+            // default(ItemKey) has Id zero and passes the game's IsValid check.
+            .DefaultIfEmpty(ItemKey.Invalid).First();
         return key.IsValid();
     }
 
-    private static bool FeedOneChicken(DataContext context, short chickenTemplateId, ItemKey key, ItemSourceType source)
+    private static bool FeedOneChicken(DataContext context, GameData.Domains.Building.Chicken chicken, ItemKey key, ItemSourceType source)
     {
         try
         {
+            // The native method resolves by template, not instance id. Never feed
+            // another settlement's chicken or loop on an unchanged duplicate.
+            if (!DomainManager.Building.TryGetElement_ChickenByTemplateId(chicken.TemplateId, out var nativeTarget)
+                || nativeTarget.Id != chicken.Id)
+            {
+                AdaptableLog.Warning("[BetterTaiwuScroll] Auto chicken care skipped an ambiguous template: chicken="
+                    + chicken.Id + ", template=" + chicken.TemplateId + ".", false);
+                return false;
+            }
+
             var result = FeedChickenWithArgsMethod.Invoke(
                 DomainManager.Building,
-                new object[] { context, (int)chickenTemplateId, key, source });
+                new object[] { context, (int)chicken.TemplateId, key, source });
             var happinessChange = result == null ? 0 : Convert.ToInt32(result);
             if (happinessChange <= 0)
             {
                 AdaptableLog.Warning("[BetterTaiwuScroll] Auto chicken care stopped for one chicken because feed made no positive progress: item=" + key + ".", false);
                 return false;
             }
+            // Native feeding consumes inventory/trough items, but has no warehouse branch.
             if (source == ItemSourceType.Warehouse)
-                DomainManager.Taiwu.RemoveItem(context, key, 1, ItemSourceType.Warehouse, false, false);
+                DomainManager.Taiwu.RemoveItem(context, key, 1, ItemSourceType.Warehouse, true, false);
+            if (!DomainManager.Building.TryGetElement_Chicken(chicken.Id, out var updated)
+                || updated.Id != chicken.Id || updated.Happiness <= chicken.Happiness)
+            {
+                AdaptableLog.Warning("[BetterTaiwuScroll] Auto chicken care stopped because the target did not gain happiness: chicken="
+                    + chicken.Id + ", item=" + key + ".", false);
+                return false;
+            }
             return true;
         }
         catch (TargetInvocationException ex)

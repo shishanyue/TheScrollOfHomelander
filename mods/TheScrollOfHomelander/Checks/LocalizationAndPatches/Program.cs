@@ -43,13 +43,57 @@ static class Program
         var reports = new List<string>();
         using (var patches = new ModPatchGroups())
         {
-            patches.Install(typeof(Program).Assembly, "homelander.pr2.check", ModPatchGroups.Classify, reports.Add);
+            patches.Install(typeof(Program).Assembly, "homelander.pr2.check",
+                type => type == typeof(MakeABeforeFailurePatch) || type == typeof(MakeZMissingTargetPatch)
+                    || type == typeof(UiHealthyPatch) ? ModPatchGroups.Classify(type) : null, reports.Add);
             Equal(1, PatchTarget.Make(), "Failed group rolls back earlier patches");
             Equal(2, PatchTarget.Ui(), "Unrelated group remains installed");
             Equal(true, reports.Any(s => s.StartsWith("Disabled patch group 'make'")), "Failure is reported");
         }
         Equal(1, PatchTarget.Ui(), "Dispose restores target");
-        Console.WriteLine("PASS: localization catalog, language changes, stable row identity, options, fallbacks, Harmony rollback and independent groups.");
+
+        CheckMonthlyIsolation("diagnostics failure", diagnosticsFailure: true);
+        CheckMonthlyIsolation("performance failure", performanceFailure: true);
+        CheckMonthlyIsolation("diagnostics and performance failures", diagnosticsFailure: true, performanceFailure: true);
+        CheckMonthlyIsolation("purchase failure", purchaseFailure: true);
+        CheckMonthlyIsolation("healthy monthly features");
+        Console.WriteLine("PASS: localization catalog, language changes, stable row identity, options, fallbacks, Harmony rollback and monthly feature isolation.");
+    }
+
+    static void CheckMonthlyIsolation(string scenario, bool diagnosticsFailure = false,
+        bool performanceFailure = false, bool purchaseFailure = false)
+    {
+        var reports = new List<string>();
+        using (var patches = new ModPatchGroups())
+        {
+            patches.Install(typeof(Program).Assembly, "homelander.monthly.check", type =>
+            {
+                var participates = type == typeof(AutoMonthlyPurchaseAdvanceMonthHealthyPatch)
+                    || type == typeof(AutoCultivationAdvanceMonthHealthyPatch)
+                    || (diagnosticsFailure && (type == typeof(AdvanceMonthDiagnosticsABeforeFailurePatch)
+                        || type == typeof(AdvanceMonthDiagnosticsZMissingTargetPatch)))
+                    || (performanceFailure && (type == typeof(AdvanceMonthPerformanceABeforeFailurePatch)
+                        || type == typeof(AdvanceMonthPerformanceZMissingTargetPatch)))
+                    || (purchaseFailure && type == typeof(AutoMonthlyPurchaseAdvanceMonthZMissingTargetPatch));
+                return participates ? ModPatchGroups.Classify(type) : null;
+            }, reports.Add);
+
+            Equal(purchaseFailure ? 1 : 2, PatchTarget.MonthlyPurchase(), scenario + ": purchase hook executes unless its own group fails");
+            Equal(3, PatchTarget.Cultivation(), scenario + ": cultivation hook still executes");
+            Equal(1, PatchTarget.Diagnostics(), scenario + ": failed diagnostics patches are rolled back");
+            Equal(1, PatchTarget.Performance(), scenario + ": failed performance patches are rolled back");
+            Equal(true, reports.Contains("Installed patch group: cultivation"), scenario + ": cultivation installed independently");
+            Equal(!purchaseFailure, reports.Contains("Installed patch group: monthly-purchase"), scenario + ": purchase group status");
+            Equal(diagnosticsFailure, reports.Any(s => s.StartsWith("Disabled patch group 'month-diagnostics'")), scenario + ": diagnostics failure reported");
+            Equal(performanceFailure, reports.Any(s => s.StartsWith("Disabled patch group 'month'")), scenario + ": performance failure reported");
+            Equal(purchaseFailure, reports.Any(s => s.StartsWith("Disabled patch group 'monthly-purchase'")), scenario + ": purchase failure reported");
+        }
+
+        Equal(1, PatchTarget.MonthlyPurchase(), scenario + ": dispose restores purchase target");
+        Equal(1, PatchTarget.Cultivation(), scenario + ": dispose restores cultivation target");
+        Equal(1, PatchTarget.Diagnostics(), scenario + ": dispose restores diagnostics target");
+        Equal(1, PatchTarget.Performance(), scenario + ": dispose restores performance target");
+        Console.WriteLine("PASS: " + scenario);
     }
 }
 
@@ -57,6 +101,10 @@ static class PatchTarget
 {
     [MethodImpl(MethodImplOptions.NoInlining)] public static int Make() => 1;
     [MethodImpl(MethodImplOptions.NoInlining)] public static int Ui() => 1;
+    [MethodImpl(MethodImplOptions.NoInlining)] public static int MonthlyPurchase() => 1;
+    [MethodImpl(MethodImplOptions.NoInlining)] public static int Cultivation() => 1;
+    [MethodImpl(MethodImplOptions.NoInlining)] public static int Diagnostics() => 1;
+    [MethodImpl(MethodImplOptions.NoInlining)] public static int Performance() => 1;
 }
 
 [HarmonyPatch(typeof(PatchTarget), nameof(PatchTarget.Make))]
@@ -75,6 +123,48 @@ static class MakeZMissingTargetPatch
 static class UiHealthyPatch
 {
     static void Postfix(ref int __result) => __result++;
+}
+
+[HarmonyPatch(typeof(PatchTarget), nameof(PatchTarget.MonthlyPurchase))]
+static class AutoMonthlyPurchaseAdvanceMonthHealthyPatch
+{
+    static void Postfix(ref int __result) => __result++;
+}
+
+[HarmonyPatch(typeof(PatchTarget), "RemovedPurchaseMethod")]
+static class AutoMonthlyPurchaseAdvanceMonthZMissingTargetPatch
+{
+    static void Postfix() { }
+}
+
+[HarmonyPatch(typeof(PatchTarget), nameof(PatchTarget.Cultivation))]
+static class AutoCultivationAdvanceMonthHealthyPatch
+{
+    static void Postfix(ref int __result) => __result += 2;
+}
+
+[HarmonyPatch(typeof(PatchTarget), nameof(PatchTarget.Diagnostics))]
+static class AdvanceMonthDiagnosticsABeforeFailurePatch
+{
+    static void Postfix(ref int __result) => __result += 100;
+}
+
+[HarmonyPatch(typeof(PatchTarget), "RemovedDiagnosticsMethod")]
+static class AdvanceMonthDiagnosticsZMissingTargetPatch
+{
+    static void Postfix() { }
+}
+
+[HarmonyPatch(typeof(PatchTarget), nameof(PatchTarget.Performance))]
+static class AdvanceMonthPerformanceABeforeFailurePatch
+{
+    static void Postfix(ref int __result) => __result += 100;
+}
+
+[HarmonyPatch(typeof(PatchTarget), "RemovedPerformanceMethod")]
+static class AdvanceMonthPerformanceZMissingTargetPatch
+{
+    static void Postfix() { }
 }
 
 static class LocalStringManager

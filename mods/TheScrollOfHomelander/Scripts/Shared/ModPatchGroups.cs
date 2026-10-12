@@ -98,6 +98,11 @@ internal sealed class ModPatchGroups : IDisposable
         var name = type.Name;
         if (name.StartsWith("ModSession", StringComparison.Ordinal)) return "session";
         if (name.StartsWith("ItemScroll", StringComparison.Ordinal)) return "item-scroll";
+        // Automatic actions must survive unrelated diagnostics/optimization failures.
+        // Check these before the general AdvanceMonth bucket: each group rolls back as a unit.
+        if (name.StartsWith("AutoMonthlyPurchase", StringComparison.Ordinal)) return "monthly-purchase";
+        if (name.StartsWith("AutoCultivation", StringComparison.Ordinal)) return "cultivation";
+        if (name.StartsWith("AdvanceMonthDiagnostics", StringComparison.Ordinal)) return "month-diagnostics";
         if (name.Contains("AdvanceMonth")) return "month";
         if (name.Contains("Recruit") || name.Contains("Harvest") || name.Contains("BuildingEarnings")) return "recruit";
         if (name.Contains("Make") || name.Contains("Repair")) return "make";
